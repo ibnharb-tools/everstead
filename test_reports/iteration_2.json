@@ -1,0 +1,27 @@
+{
+  "summary": "Retest of duplicate auto-save bug after fix. Frontend-only flow tested: /retrofit -> wizard -> save (logged out) -> /signup -> /dashboard auto-save. Verified exactly ONE saved home created. Regression for view plan and delete also passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DashboardPage useEffect correctly consumes sessionStorage('everstead_pending_plan') BEFORE the await and guards with savedPendingRef -- bug fix is correct and tested.",
+    "Minor: Recharts emits width(-1)/height(-1) warnings on ResultsView render. Not breaking, but containers should set min-height/min-width to silence warnings.",
+    "Minor: WebGL/THREE.js context-lost warning appears post-navigation; benign on this run but could indicate unmounted 3D scene without disposal."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100%"},
+  "test_credentials": "Created fresh signup test_<epoch>@example.com / TestPass123! for this run",
+  "seed_data_creation": "Created one signed-up user via /api/auth/signup during the flow; one saved retrofit created and then deleted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 confirmed the duplicate auto-save fix. After /signup completion the dashboard renders exactly 1 [data-testid^='view-plan-'] card, navigating to /plan/<id> shows results-view, and deleting via [data-testid='delete-plan-<id>'] removes the card and reveals [data-testid='dashboard-empty']. Backend was not re-tested per instructions.",
+  "rca of the issue": "Original (iteration 1) bug: React StrictMode/double-effect caused the dashboard useEffect to call saveRetrofit twice on the pending plan, producing two identical cards. Fix (verified): in DashboardPage useEffect, the sessionStorage key is read AND removed synchronously before the await, and a useRef (savedPendingRef) guards against re-entry within the same component instance. Verified: count of view-plan-* cards == 1 after signup->dashboard auto-save."
+}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowRight, Trash2, Sun, Loader2, Plus } from 'lucide-react';
@@ -17,6 +17,7 @@ function greeting() {
 export default function DashboardPage() {
   const { user, token, logout } = useAuth();
   const [retrofits, setRetrofits] = useState(null);
+  const savedPendingRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -31,11 +32,13 @@ export default function DashboardPage() {
   useEffect(() => {
     (async () => {
       const pending = sessionStorage.getItem('everstead_pending_plan');
-      if (pending && token) {
+      if (pending && token && !savedPendingRef.current) {
+        // consume immediately so a re-run (StrictMode) cannot save twice
+        savedPendingRef.current = true;
+        sessionStorage.removeItem('everstead_pending_plan');
         try {
           const { assessment, label } = JSON.parse(pending);
           await everstead.saveRetrofit(assessment, label, token);
-          sessionStorage.removeItem('everstead_pending_plan');
           toast.success('Your plan is saved.');
         } catch {
           /* ignore, still load list */
