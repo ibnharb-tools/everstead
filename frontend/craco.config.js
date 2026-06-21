@@ -61,6 +61,21 @@ let webpackConfig = {
 };
 
 webpackConfig.devServer = (devServerConfig) => {
+  // react-scripts 5 emits webpack-dev-server v4 options. Strip / convert the
+  // ones removed in webpack-dev-server v5 so option validation passes.
+  delete devServerConfig.onBeforeSetupMiddleware;
+  delete devServerConfig.onAfterSetupMiddleware;
+  if ('https' in devServerConfig) {
+    const httpsCfg = devServerConfig.https;
+    delete devServerConfig.https;
+    if (httpsCfg) {
+      devServerConfig.server = {
+        type: 'https',
+        options: httpsCfg === true ? {} : httpsCfg,
+      };
+    }
+  }
+
   // Add health check endpoints if enabled
   if (config.enableHealthCheck && setupHealthEndpoints && healthPluginInstance) {
     const originalSetupMiddlewares = devServerConfig.setupMiddlewares;

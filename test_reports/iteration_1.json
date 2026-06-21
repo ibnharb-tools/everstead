@@ -1,0 +1,54 @@
+{
+  "summary": "First iteration - tested Everstead backend (auth + retrofits) and full frontend flows (home, how-it-works, retrofit wizard, save->signup->dashboard auto-save, view plan, delete plan, demo login, bad login, OAuth placeholder). 19/19 pytest tests pass against the public preview URL. UI flows all work. One real bug found: dashboard auto-save creates duplicate retrofits when arriving from signup (saves twice due to non-guarded useEffect).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "DashboardPage.jsx (useEffect at lines 31-46)",
+        "issue": "When user signs up with a pending plan in sessionStorage('everstead_pending_plan'), the dashboard auto-saves the plan TWICE (two identical retrofits appear). Cause: in React StrictMode dev (and whenever the effect re-runs because `load`/`token` deps change), the `await everstead.saveRetrofit(...)` fires before `sessionStorage.removeItem(...)` executes, so the second effect invocation still sees the pending plan and POSTs again. Reproduced consistently: after a clean signup with a saved pending plan I landed on /dashboard and saw 2 view-plan cards instead of 1.",
+        "selector": "[data-testid^=\"view-plan-\"]",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "HowItWorksPage / Recharts ResponsiveContainer",
+        "issue": "Console warns 'The width(-1) and height(-1) of chart should be greater than 0' on /how-it-works during initial render. Charts do render visually, but the ResponsiveContainer parent likely lacks an explicit height/min-height on first mount. Add a fixed/min height to the chart wrapper.",
+        "selector": ".recharts-responsive-container",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix DashboardPage.jsx duplicate auto-save: read+remove sessionStorage('everstead_pending_plan') synchronously before the await, OR guard with a useRef flag so the save runs at most once per mount.",
+    "Fix Recharts width/height -1 warning on /how-it-works by giving ResponsiveContainer's parent an explicit height (e.g. h-72) or pass aspect prop."
+  ],
+  "critical_code_review_comments": [
+    "DashboardPage.jsx useEffect: ordering bug - removeItem must happen before await, or use a ref guard, otherwise plan is saved twice in StrictMode and on any re-run.",
+    "server.py has no rate limiting on /api/auth/login - brute-force is possible. Consider lockout per playbook (not requested here but worth noting).",
+    "server.py forgot-password endpoint is fine (always 200) - good user-enumeration protection.",
+    "Cross-user isolation on retrofits is correctly implemented (user_id scoped on every read/delete) and verified by tests.",
+    "everstead.js error handling throws plain object (not Error) - works but `err instanceof Error` would be false. Minor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (created)",
+    "/app/backend/tests/__init__.py (created)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 pytest)",
+    "frontend": "~95% (all flows pass; one duplicate-save bug on signup->dashboard)"
+  },
+  "test_credentials": "demo@everstead.app / Everstead123! (verified working). Signup tests use unique example.com emails. NOTE: Pydantic EmailStr rejects .test TLD (DNS deliverability check) - test code uses @example.com.",
+  "seed_data_creation": "Each pytest run creates new TEST_ users with unique example.com emails. Retrofits created in tests are deleted in the same test class. One additional signup user was created by Playwright (playwright_<uuid>@example.com) with one remaining retrofit.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest at /app/backend/tests/backend_test.py covers all auth + retrofits endpoints including cross-user isolation. Use REACT_APP_BACKEND_URL env. The .test TLD will fail EmailStr validation, use @example.com for new test users. The duplicate-save bug is in DashboardPage.jsx useEffect (lines 31-46) - after main agent fix, retest by signing up a fresh user with a pending plan and confirming exactly 1 view-plan card on /dashboard.",
+  "rca of the issue": "DashboardPage.jsx useEffect reads sessionStorage('everstead_pending_plan') and awaits saveRetrofit BEFORE calling sessionStorage.removeItem. In React 18 StrictMode dev (and any time the effect re-runs because `load` callback identity changes or token changes), the second invocation still finds the unconsumed pending plan and saves again. FIX: const pending = sessionStorage.getItem(...); sessionStorage.removeItem(...) BEFORE the await; or guard with a useRef boolean (e.g., savedPendingRef.current). REPRO: clear localStorage, do retrofit -> Save my results -> signup with fresh email -> dashboard shows 2 identical cards instead of 1."
+}
