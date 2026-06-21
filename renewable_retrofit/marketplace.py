@@ -1,98 +1,138 @@
 """
-Step 8: Equipment cost benchmarks and vendor links.
+marketplace.py
+==============
+Step 8: Equipment marketplace + cost benchmarks.
+
+Prices move constantly, so this module stores DATED, SOURCED cost *ranges* (not
+live quotes) anchored to authoritative benchmarks, plus links to real
+marketplaces where each item can be compared and purchased. Use `price_capex()`
+to turn a system size into a gross-capex estimate, then feed that into
+economics.evaluate(). For a binding number, always pull live quotes.
+
+Authoritative cost references
+  * NREL Annual Technology Baseline (ATB):           https://atb.nrel.gov/
+  * NREL U.S. PV + Storage Cost Benchmark:           https://www.nrel.gov/solar/market-research-analysis/solar-installed-system-cost.html
+  * NREL Distributed Wind / small wind:              https://www.nrel.gov/wind/distributed-wind.html
+  * DOE Geothermal Heat Pump cost data:              https://www.energy.gov/energysaver/geothermal-heat-pumps
+
+Comparison / purchase marketplaces (real)
+  * Solar quotes & comparison ....... EnergySage      https://www.energysage.com/
+  * DIY / wholesale solar+battery ... Signature Solar https://signaturesolar.com/
+                                      Wholesale Solar / Unbound  https://unboundsolar.com/
+                                      CED Greentech (distributor) https://www.cedgreentech.com/
+  * Small wind turbines ............. Bergey          https://bergey.com/
+                                      Primus WindPower https://www.primuswindpower.com/
+  * Micro-hydro ..................... Canyon Hydro / Scott Hydro / Harris Hydro (search)
+  * Geothermal heat pumps ........... WaterFurnace    https://www.waterfurnace.com/
+                                      ClimateMaster   https://www.climatemaster.com/
+  * Batteries ....................... Tesla Powerwall, Enphase, EG4 (via above retailers)
+  * Find certified installers ....... NABCEP          https://www.nabcep.org/
 """
 from __future__ import annotations
 
-# Installed cost benchmarks (per unit as noted)
-_BENCHMARKS = {
+from dataclasses import dataclass
+
+BENCHMARK_DATE = "NREL benchmarks ~2023-2024 $, escalate for current year"
+
+
+@dataclass
+class CostBand:
+    low: float
+    typical: float
+    high: float
+    unit: str
+    note: str = ""
+
+
+# Installed (turnkey) cost benchmarks. USD. Ranges reflect DIY-low to full-install-high.
+CATALOG = {
     "solar_pv": {
-        "low_per_w": 2.10, "high_per_w": 3.80, "unit": "per_watt", "currency": "USD",
-        "vendors": [
-            {"name": "EnergySage", "url": "https://www.energysage.com/", "kind": "comparison"},
-            {"name": "Signature Solar", "url": "https://signaturesolar.com/", "kind": "retailer"},
-            {"name": "Unbound Solar", "url": "https://unboundsolar.com/", "kind": "retailer"},
-            {"name": "CED Greentech", "url": "https://www.cedgreentech.com/", "kind": "distributor"},
-        ],
-        "buy_at": [
-            {"name": "EnergySage", "url": "https://www.energysage.com/"},
-            {"name": "Signature Solar", "url": "https://signaturesolar.com/"},
-        ],
+        "unit_basis": "per_w_dc",
+        "cost": CostBand(2.10, 2.90, 3.80, "$/W_dc",
+                         "NREL 2023 residential benchmark ~$2.90/W turnkey; "
+                         "DIY/wholesale modules alone ~$0.30-0.45/W."),
+        "marketplaces": ["https://www.energysage.com/", "https://signaturesolar.com/",
+                         "https://unboundsolar.com/", "https://www.cedgreentech.com/"],
     },
     "battery": {
-        "low_per_kwh": 800, "high_per_kwh": 1500, "unit": "per_kwh", "currency": "USD",
-        "vendors": [
-            {"name": "EnergySage", "url": "https://www.energysage.com/", "kind": "comparison"},
-            {"name": "Signature Solar", "url": "https://signaturesolar.com/", "kind": "retailer"},
-        ],
-        "buy_at": [
-            {"name": "Signature Solar", "url": "https://signaturesolar.com/"},
-        ],
+        "unit_basis": "per_kwh",
+        "cost": CostBand(800, 1100, 1500, "$/kWh",
+                         "NREL 2023 benchmark ~$1,000-1,400/kWh installed; "
+                         "must be >=3 kWh to have qualified for legacy 25D."),
+        "marketplaces": ["https://www.energysage.com/", "https://signaturesolar.com/"],
     },
-    "wind": {
-        "low_per_kw": 3500, "high_per_kw": 10000, "unit": "per_kw", "currency": "USD",
-        "vendors": [
-            {"name": "Bergey Windpower", "url": "https://bergey.com/", "kind": "manufacturer"},
-            {"name": "Primus WindPower", "url": "https://www.primuswindpower.com/", "kind": "manufacturer"},
-        ],
-        "buy_at": [
-            {"name": "Bergey Windpower", "url": "https://bergey.com/"},
-        ],
+    "wind_small": {
+        "unit_basis": "per_kw",
+        "cost": CostBand(3500, 6000, 10000, "$/kW",
+                         "Distributed/small wind installed cost is high per kW "
+                         "(towers, permitting); 5-10 kW class typical."),
+        "marketplaces": ["https://bergey.com/", "https://www.primuswindpower.com/"],
     },
     "micro_hydro": {
-        "low_per_kw": 2500, "high_per_kw": 12000, "unit": "per_kw", "currency": "USD",
-        "vendors": [
-            {"name": "Harris Hydro", "url": "https://www.harrishydro.com/", "kind": "retailer"},
-        ],
-        "buy_at": [
-            {"name": "Harris Hydro", "url": "https://www.harrishydro.com/"},
-        ],
+        "unit_basis": "per_kw",
+        "cost": CostBand(2500, 5000, 12000, "$/kW",
+                         "Highly site-specific (intake, penstock, civil works); "
+                         "very low $/kWh where good head+flow exist."),
+        "marketplaces": ["https://www.energy.gov/energysaver/microhydropower-systems"],
     },
-    "geothermal": {
-        "low_per_kw_thermal": 1800, "high_per_kw_thermal": 4500, "unit": "per_kw_thermal", "currency": "USD",
-        "vendors": [
-            {"name": "WaterFurnace", "url": "https://www.waterfurnace.com/", "kind": "manufacturer"},
-            {"name": "ClimateMaster", "url": "https://www.climatemaster.com/", "kind": "manufacturer"},
-        ],
-        "buy_at": [
-            {"name": "WaterFurnace", "url": "https://www.waterfurnace.com/"},
-        ],
+    "geothermal_gshp": {
+        "unit_basis": "per_kw_thermal",
+        "cost": CostBand(1800, 2800, 4500, "$/kW_th",
+                         "GSHP incl. ground loop ~$18k-$45k for a home (3-5 ton); "
+                         "ground-loop drilling dominates cost."),
+        "marketplaces": ["https://www.waterfurnace.com/",
+                         "https://www.climatemaster.com/"],
+    },
+    "solar_thermal": {
+        "unit_basis": "per_m2_collector",
+        "cost": CostBand(600, 900, 1300, "$/m^2",
+                         "Solar water heating; 2-4 collectors typical per home."),
+        "marketplaces": ["https://www.energy.gov/energysaver/solar-water-heaters"],
     },
 }
 
-# Mid-range cost multipliers for capex calculation
-_MIDPOINT = {
-    "solar_pv": ("mid_per_w", lambda b: (b["low_per_w"] + b["high_per_w"]) / 2),
-    "battery": ("mid_per_kwh", lambda b: (b["low_per_kwh"] + b["high_per_kwh"]) / 2),
-    "wind": ("mid_per_kw", lambda b: (b["low_per_kw"] + b["high_per_kw"]) / 2),
-    "micro_hydro": ("mid_per_kw", lambda b: (b["low_per_kw"] + b["high_per_kw"]) / 2),
-    "geothermal": ("mid_per_kw_thermal", lambda b: (b["low_per_kw_thermal"] + b["high_per_kw_thermal"]) / 2),
-}
 
+def price_capex(tech: str, size: float, level: str = "typical") -> dict:
+    """Estimate gross installed capex.
 
-def price_capex(tech: str, size: float) -> dict:
-    """Return gross_capex for a given technology and size."""
-    b = _BENCHMARKS[tech]
-    _, mid_fn = _MIDPOINT[tech]
-    mid = mid_fn(b)
-    # Size units: solar_pv in kW→W, battery in kWh, wind/hydro in kW, geo in kW_thermal
-    if tech == "solar_pv":
-        gross = mid * size * 1000  # $/W × W
-    else:
-        gross = mid * size
-    return {"gross_capex": round(gross)}
-
-
-def catalog_table() -> dict:
-    return _BENCHMARKS
-
-
-def get_marketplace(tech: str) -> dict:
-    b = _BENCHMARKS[tech]
-    low_key = [k for k in b if k.startswith("low_")][0]
-    high_key = [k for k in b if k.startswith("high_")][0]
+    tech  : key in CATALOG
+    size  : kW_dc (solar), kWh (battery), kW (wind/hydro), kW_thermal (gshp), m^2 (thermal)
+    level : 'low' | 'typical' | 'high'
+    """
+    if tech not in CATALOG:
+        raise KeyError(f"Unknown tech {tech!r}; options: {list(CATALOG)}")
+    band = CATALOG[tech]["cost"]
+    rate = {"low": band.low, "typical": band.typical, "high": band.high}[level]
+    basis = CATALOG[tech]["unit_basis"]
+    # Solar quoted per-W: convert kW -> W.
+    multiplier = size * 1000.0 if basis == "per_w_dc" else size
     return {
-        "technology": tech,
-        "costBand": {"low": b[low_key], "high": b[high_key], "unit": b["unit"], "currency": b["currency"]},
-        "vendors": b["vendors"],
-        "note": "Cost bands are typical ranges, not live prices.",
+        "tech": tech,
+        "size": size,
+        "rate": rate,
+        "unit": band.unit,
+        "gross_capex": round(rate * multiplier, 2),
+        "note": band.note,
+        "marketplaces": CATALOG[tech]["marketplaces"],
+        "benchmark_basis": BENCHMARK_DATE,
     }
+
+
+def catalog_table() -> list:
+    rows = []
+    for k, v in CATALOG.items():
+        b = v["cost"]
+        rows.append({
+            "technology": k,
+            "low": b.low, "typical": b.typical, "high": b.high, "unit": b.unit,
+            "buy_at": ", ".join(v["marketplaces"][:2]),
+        })
+    return rows
+
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(price_capex("solar_pv", 6.0), indent=2))
+    print(json.dumps(price_capex("battery", 13.5, "typical"), indent=2))
+    for r in catalog_table():
+        print(r["technology"], r["low"], "-", r["high"], r["unit"])

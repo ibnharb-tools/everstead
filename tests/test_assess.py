@@ -48,8 +48,9 @@ async def test_assess_technology_consistency(client: AsyncClient):
         inc = tech["incentives"]
         assert inc["total"] == inc["federal"] + inc["state"] + inc["rebates"], \
             f"incentives.total mismatch in {tech['type']}"
-        assert tech["netCapex"] == tech["grossCapex"] - inc["total"], \
-            f"netCapex mismatch in {tech['type']}"
+        if tech["grossCapex"] is not None:
+            assert tech["netCapex"] == tech["grossCapex"] - inc["total"], \
+                f"netCapex mismatch in {tech['type']}"
 
 
 @pytest.mark.asyncio

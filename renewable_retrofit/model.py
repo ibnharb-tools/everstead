@@ -1,7 +1,15 @@
 """
-Step 9: Orchestrator — run_assessment.
+model.py
+========
+Step 9: Orchestrator. Runs the full home-retrofit assessment end-to-end:
+  address/coords -> resource data -> per-technology yield -> capex from
+  marketplace benchmarks -> incentives + economics -> ranked recommendation.
+
+Returns a single nested dict you can print, JSON-dump, or feed to a UI.
 """
 from __future__ import annotations
+
+import json
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -10,171 +18,186 @@ from . import resource, solar, wind, hydro_geo, economics, marketplace
 
 @dataclass
 class AssessmentInputs:
+    # Location: provide ONE of address or (lat, lon)
+    address: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
-    address: str = ""
     allow_network: bool = True
 
-    pv_kw: float = 8.0
-    battery_kwh: Optional[float] = None
-    wind_kw: Optional[float] = None
-    gshp_kw_thermal: Optional[float] = None
-    hydro_head_m: Optional[float] = None
-    hydro_flow_lps: Optional[float] = None
+    # Which technologies to evaluate
+    eval_solar: bool = True
+    eval_wind: bool = True
+    eval_hydro: bool = False           # needs head+flow inputs below
+    eval_geothermal: bool = True
 
+    # System sizes
+    pv_kw: float = 6.0
+    battery_kwh: float = 0.0
+    wind_kw: float = 10.0
+    gshp_kw_thermal: float = 10.5
+
+    # Hydro site inputs (only if eval_hydro)
+    hydro_head_m: float = 0.0
+    hydro_flow_lps: float = 0.0
+
+    # Economics / incentives
     tax_year: int = 2026
     country: str = "US"
-    electricity_price: Optional[float] = None
-    export_price: float = 0.07
+    financing: str = "owned"
+    electricity_price: float = 0.16
+    export_price: float = 0.06
     upfront_rebates: float = 0.0
     state_credit_fraction: float = 0.0
+    cost_level: str = "typical"        # low | typical | high
+
+    # Baseline systems the GSHP would replace (for fuel/efficiency savings)
+    incumbent_heat_cop: float = 0.95   # 0.95 ~ gas furnace efficiency-equivalent
+    incumbent_heat_fuel_price_per_kwh: float = 0.06  # delivered-heat $/kWh_thermal
+    incumbent_cool_cop: float = 3.5    # standard AC (~SEER 12-14) seasonal COP
 
 
-def run_assessment(inputs: AssessmentInputs) -> dict:
-    # 1. Resolve site
-    if inputs.lat is None or inputs.lon is None:
-        if not inputs.address:
-            raise ValueError("Either lat/lon or address must be provided")
-        lat, lon, resolved = resource.geocode(inputs.address)
-        elevation = resource.get_elevation(lat, lon)
-        site = resource.Site(lat=lat, lon=lon, address=resolved, elevation_m=elevation)
+def _resolve_site(inp: AssessmentInputs) -> resource.Site:
+    if inp.address:
+        try:
+            site = resource.geocode(inp.address)
+        except Exception:
+            raise ValueError("Geocoding failed (offline?). Pass lat/lon instead.")
+    elif inp.lat is not None and inp.lon is not None:
+        site = resource.from_coordinates(inp.lat, inp.lon)
     else:
-        site = resource.Site(
-            lat=inputs.lat, lon=inputs.lon, address=inputs.address, elevation_m=0.0
-        )
+        raise ValueError("Provide either address or (lat, lon).")
+    resource.fetch_climate(site, allow_network=inp.allow_network)
+    return site
 
-    site = resource.fetch_climate(site, allow_network=inputs.allow_network)
 
-    electricity_price = inputs.electricity_price or _regional_default_price(site)
-    price_source = "user_provided" if inputs.electricity_price else "regional_default"
-
+def run_assessment(inp: AssessmentInputs) -> dict:
+    site = _resolve_site(inp)
     ctx = economics.IncentiveContext(
-        tax_year=inputs.tax_year,
-        country=inputs.country,
-        upfront_rebates=inputs.upfront_rebates,
-        state_credit_fraction=inputs.state_credit_fraction,
+        country=inp.country, tax_year=inp.tax_year, financing=inp.financing,
+        upfront_rebates=inp.upfront_rebates,
+        state_credit_fraction=inp.state_credit_fraction,
     )
-    cfg = economics.EconConfig(
-        electricity_price_per_kwh=electricity_price,
-        export_price_per_kwh=inputs.export_price,
-    )
-
-    technologies = {}
-
-    # Solar PV
-    pv_cfg = solar.PVConfig(dc_capacity_kw=inputs.pv_kw)
-    pv_res = solar.simulate_pv(site, pv_cfg)
-    capex_pv = marketplace.price_capex("solar_pv", inputs.pv_kw)["gross_capex"]
-    econ_pv = economics.evaluate(capex_pv, pv_res.annual_ac_kwh, inputs.pv_kw, ctx, cfg)
-    technologies["solar_pv"] = {
-        "pv": pv_res,
-        "economics": econ_pv,
-        "buy_at": marketplace._BENCHMARKS["solar_pv"]["buy_at"],
-        "annual_kwh": pv_res.annual_ac_kwh,
-        "heat_demand_kwh": None,
-    }
-
-    # Battery
-    if inputs.battery_kwh:
-        capex_bat = marketplace.price_capex("battery", inputs.battery_kwh)["gross_capex"]
-        # Battery savings: assume 15% bill reduction from time-of-use arbitrage
-        bat_savings = pv_res.annual_ac_kwh * electricity_price * 0.15
-        econ_bat = economics.evaluate(capex_bat, 0, inputs.battery_kwh, ctx, cfg,
-                                      yearly_savings_override=bat_savings)
-        technologies["battery"] = {
-            "economics": econ_bat,
-            "buy_at": marketplace._BENCHMARKS["battery"]["buy_at"],
-            "annual_kwh": None,
-            "heat_demand_kwh": None,
-            "system_kwh": inputs.battery_kwh,
-        }
-
-    # Wind
-    if inputs.wind_kw:
-        turbine = wind.TurbineSpec(rated_kw=inputs.wind_kw)
-        wind_res = wind.simulate_wind(site, turbine)
-        capex_wind = marketplace.price_capex("wind", inputs.wind_kw)["gross_capex"]
-        econ_wind = economics.evaluate(capex_wind, wind_res.annual_kwh, inputs.wind_kw, ctx, cfg)
-        technologies["wind"] = {
-            "wind": wind_res,
-            "economics": econ_wind,
-            "buy_at": marketplace._BENCHMARKS["wind"]["buy_at"],
-            "annual_kwh": wind_res.annual_kwh,
-            "heat_demand_kwh": None,
-            "rated_kw": inputs.wind_kw,
-        }
-
-    # Geothermal GSHP
-    if inputs.gshp_kw_thermal:
-        gshp_cfg = hydro_geo.GSHPConfig(kw_thermal=inputs.gshp_kw_thermal)
-        gshp_res = hydro_geo.simulate_gshp(site, gshp_cfg)
-        capex_geo = marketplace.price_capex("geothermal", inputs.gshp_kw_thermal)["gross_capex"]
-        # Savings: replacing gas/electric heat at electricity price with COP advantage
-        incumbent_cost = (gshp_res.heat_demand_kwh + gshp_res.cool_demand_kwh) * electricity_price
-        gshp_elec_cost = gshp_res.annual_kwh_electric * electricity_price
-        geo_savings = max(0, incumbent_cost - gshp_elec_cost)
-        econ_geo = economics.evaluate(capex_geo, 0, inputs.gshp_kw_thermal, ctx, cfg,
-                                      yearly_savings_override=geo_savings)
-        technologies["geothermal"] = {
-            "gshp": gshp_res,
-            "economics": econ_geo,
-            "buy_at": marketplace._BENCHMARKS["geothermal"]["buy_at"],
-            "annual_kwh": None,
-            "heat_demand_kwh": gshp_res.heat_demand_kwh,
-        }
-
-    # Micro-hydro
-    if inputs.hydro_head_m and inputs.hydro_flow_lps:
-        hydro_res = hydro_geo.simulate_hydro(inputs.hydro_head_m, inputs.hydro_flow_lps)
-        capex_hydro = marketplace.price_capex("micro_hydro", hydro_res.power_kw)["gross_capex"]
-        econ_hydro = economics.evaluate(capex_hydro, hydro_res.annual_kwh, hydro_res.power_kw, ctx, cfg)
-        technologies["micro_hydro"] = {
-            "hydro": hydro_res,
-            "economics": econ_hydro,
-            "buy_at": marketplace._BENCHMARKS["micro_hydro"]["buy_at"],
-            "annual_kwh": hydro_res.annual_kwh,
-            "heat_demand_kwh": None,
-        }
-
-    ranking = sorted(
-        [{"technology": k, "npv": v["economics"].npv, "payback": v["economics"].simple_payback_years}
-         for k, v in technologies.items()],
-        key=lambda x: x["npv"],
-        reverse=True,
+    econ_cfg = economics.EconConfig(
+        electricity_price_per_kwh=inp.electricity_price,
+        export_price_per_kwh=inp.export_price,
     )
 
-    fed_note = (
-        "The federal residential clean energy credit is 30% for systems placed in service in 2025 or earlier."
-        if ctx.tax_year <= 2025
-        else "The federal residential clean energy credit is 0 for systems placed in service after 2025. "
-             "Local and utility rebates may still apply. Confirm details with a local expert."
-    )
+    report = {"site": site.summary(), "monthly_climate": {
+        "ghi_kwh_m2_day": site.ghi_kwh_m2_day,
+        "temp_air_c": site.temp_air_c,
+        "wind_10m_ms": site.wind_10m_ms,
+    }, "technologies": {}, "ranking": []}
 
+    rankable = []
+
+    # ---- Solar PV -------------------------------------------------------- #
+    if inp.eval_solar:
+        pv = solar.simulate_pv(site, solar.PVConfig(dc_capacity_kw=inp.pv_kw))
+        capex = marketplace.price_capex("solar_pv", inp.pv_kw, inp.cost_level)
+        if inp.battery_kwh > 0:
+            bcap = marketplace.price_capex("battery", inp.battery_kwh, inp.cost_level)
+            capex["gross_capex"] += bcap["gross_capex"]
+        e = economics.evaluate(capex["gross_capex"], pv.annual_ac_kwh,
+                               inp.pv_kw, ctx, econ_cfg)
+        report["technologies"]["solar_pv"] = {
+            "annual_kwh": pv.annual_ac_kwh,
+            "specific_yield_kwh_kw": pv.specific_yield_kwh_kw,
+            "performance_ratio": pv.performance_ratio,
+            "capacity_factor": pv.capacity_factor,
+            "tilt_deg": pv.tilt_deg, "azimuth_deg": pv.azimuth_deg,
+            "gross_capex": capex["gross_capex"], "economics": _econ_dict(e),
+            "buy_at": capex["marketplaces"],
+            "pv_kw": inp.pv_kw,
+            "battery_kwh": inp.battery_kwh if inp.battery_kwh > 0 else None,
+        }
+        rankable.append(("solar_pv", pv.annual_ac_kwh, e.npv, e.simple_payback_years))
+
+    # ---- Wind ------------------------------------------------------------ #
+    if inp.eval_wind:
+        wr = wind.simulate_wind(site, wind.TurbineSpec(rated_power_kw=inp.wind_kw))
+        capex = marketplace.price_capex("wind_small", inp.wind_kw, inp.cost_level)
+        e = economics.evaluate(capex["gross_capex"], wr.annual_kwh,
+                               inp.wind_kw, ctx, econ_cfg)
+        report["technologies"]["wind"] = {
+            "annual_kwh": wr.annual_kwh, "capacity_factor": wr.capacity_factor,
+            "mean_hubheight_ms": wr.mean_hubheight_ms,
+            "weibull_k": wr.weibull_k, "weibull_c": wr.weibull_c,
+            "viability": wind.viability_note(wr),
+            "gross_capex": capex["gross_capex"], "economics": _econ_dict(e),
+            "buy_at": capex["marketplaces"],
+            "wind_kw": inp.wind_kw,
+        }
+        rankable.append(("wind", wr.annual_kwh, e.npv, e.simple_payback_years))
+
+    # ---- Hydro ----------------------------------------------------------- #
+    if inp.eval_hydro and inp.hydro_head_m > 0 and inp.hydro_flow_lps > 0:
+        hy = hydro_geo.simulate_hydro(inp.hydro_head_m, inp.hydro_flow_lps)
+        capex = marketplace.price_capex("micro_hydro", hy.rated_power_kw, inp.cost_level)
+        e = economics.evaluate(capex["gross_capex"], hy.annual_kwh,
+                               hy.rated_power_kw, ctx, econ_cfg)
+        report["technologies"]["hydro"] = {
+            "rated_power_kw": hy.rated_power_kw, "annual_kwh": hy.annual_kwh,
+            "gross_capex": capex["gross_capex"], "economics": _econ_dict(e),
+            "buy_at": capex["marketplaces"],
+        }
+        rankable.append(("hydro", hy.annual_kwh, e.npv, e.simple_payback_years))
+
+    # ---- Geothermal heat pump ------------------------------------------- #
+    if inp.eval_geothermal:
+        gc = hydro_geo.GSHPConfig(capacity_kw_thermal=inp.gshp_kw_thermal)
+        g = hydro_geo.simulate_gshp(site, gc)
+        capex = marketplace.price_capex("geothermal_gshp", inp.gshp_kw_thermal,
+                                        inp.cost_level)
+        # Heating savings: incumbent delivered-heat cost minus GSHP electricity cost.
+        incumbent_heat_cost = (g.heat_demand_kwh / inp.incumbent_heat_cop) * \
+            inp.incumbent_heat_fuel_price_per_kwh
+        gshp_heat_elec_cost = g.elec_for_heat_kwh * inp.electricity_price
+        heat_savings = incumbent_heat_cost - gshp_heat_elec_cost
+        # Cooling savings: efficiency gain vs a standard AC (both electric).
+        incumbent_cool_elec = g.cool_demand_kwh / inp.incumbent_cool_cop
+        cool_savings = (incumbent_cool_elec - g.elec_for_cool_kwh) * inp.electricity_price
+        annual_heat_savings = heat_savings + cool_savings
+        e = economics.evaluate(capex["gross_capex"], 0.0, inp.gshp_kw_thermal,
+                               ctx, econ_cfg, extra_annual_savings=annual_heat_savings)
+        report["technologies"]["geothermal"] = {
+            "heat_demand_kwh": g.heat_demand_kwh,
+            "cool_demand_kwh": g.cool_demand_kwh,
+            "gshp_electricity_kwh": g.total_gshp_elec_kwh,
+            "bore_length_m": g.bore_length_m,
+            "annual_heating_savings_dollar": round(heat_savings, 2),
+            "annual_cooling_savings_dollar": round(cool_savings, 2),
+            "gross_capex": capex["gross_capex"], "economics": _econ_dict(e),
+            "buy_at": capex["marketplaces"],
+            "gshp_kw_thermal": inp.gshp_kw_thermal,
+        }
+        rankable.append(("geothermal", g.heat_demand_kwh, e.npv, e.simple_payback_years))
+
+    # ---- Ranking (by NPV) ------------------------------------------------ #
+    rankable.sort(key=lambda r: (r[2] if r[2] is not None else -1e12), reverse=True)
+    report["ranking"] = [
+        {"technology": t, "annual_kwh_or_thermal": round(kwh, 1),
+         "npv": npv, "payback_years": pb}
+        for (t, kwh, npv, pb) in rankable
+    ]
+    report["incentive_note_2026"] = (
+        "US federal residential credit (IRC 25D) is $0 for systems placed in "
+        "service after 2025 (OBBBA). State/utility incentives via DSIRE and "
+        "lease/PPA passthrough may still apply. Verify with a tax professional."
+    )
+    return report
+
+
+def _econ_dict(e: economics.EconResult) -> dict:
     return {
-        "site": site,
-        "technologies": technologies,
-        "ranking": ranking,
-        "electricity_price": electricity_price,
-        "price_source": price_source,
-        "incentive_context": ctx,
-        "fed_note": fed_note,
-        "monthly_ghi": site.monthly_ghi_kwh_m2,
+        "gross_capex": e.gross_capex, "net_capex": e.net_capex,
+        "incentives": e.incentives, "year1_savings": e.year1_savings,
+        "simple_payback_years": e.simple_payback_years,
+        "lcoe_per_kwh": e.lcoe_per_kwh, "npv": e.npv, "irr_percent": e.irr_percent,
     }
 
 
-def _regional_default_price(site: resource.Site) -> float:
-    """Rough regional default electricity price in USD."""
-    lat, lon = site.lat, site.lon
-    # Canada
-    if lon < -50 and lat > 42:
-        return 0.11  # CAD-ish blend
-    # US west coast
-    if lon < -110 and lat > 30:
-        return 0.22
-    # US northeast
-    if lon > -80 and lat > 40:
-        return 0.22
-    # US average
-    if -130 < lon < -60 and 24 < lat < 50:
-        return 0.15
-    return 0.13
+if __name__ == "__main__":
+    inp = AssessmentInputs(lat=49.8951, lon=-97.1384, allow_network=False,
+                           pv_kw=6.0, wind_kw=10.0, tax_year=2026,
+                           electricity_price=0.106)
+    print(json.dumps(run_assessment(inp), indent=2))
