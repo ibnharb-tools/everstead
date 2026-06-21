@@ -1,0 +1,220 @@
+{
+  "project_name": "Everstead",
+  "theme": "Light",
+  "archetype": "Archetype 1: Organic & Earthy (Optimistic Variant)",
+  "brand": {
+    "name": "Everstead",
+    "tagline": "Let's energize your home.",
+    "voice_and_tone": "Plain friendly everyday language like a helpful neighbor. NEVER use em dashes. No hype/filler words (no leverage, revolutionary, seamless, cutting-edge, unlock, empower, harness, supercharge, game-changing, transform, elevate, delve, robust, synergy). Short sentences. Warm, human, grounded in real homes and real energy."
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Nunito",
+      "body": "DM Sans",
+      "import_url": "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Nunito:wght@600;700;800;900&display=swap"
+    },
+    "scale": {
+      "h1": "font-heading font-extrabold text-5xl md:text-6xl tracking-tight leading-[1.1] text-navy-900",
+      "h2": "font-heading font-bold text-3xl md:text-4xl lg:text-5xl tracking-tight leading-tight text-navy-900",
+      "h3": "font-heading font-bold text-2xl md:text-3xl tracking-tight leading-snug text-navy-900",
+      "h4": "font-heading font-bold text-xl md:text-2xl text-navy-900",
+      "body": "font-body text-lg text-navy-700 leading-relaxed",
+      "body_sm": "font-body text-base text-navy-600 leading-normal",
+      "label": "font-body text-sm font-semibold tracking-wide uppercase text-navy-500"
+    }
+  },
+  "colors": {
+    "hsl_tokens": {
+      "--background": "34 100% 97%",
+      "--surface": "0 0% 100%",
+      "--primary": "37 90% 55%",
+      "--primary-hover": "24 100% 62%",
+      "--accent-blue": "202 73% 56%",
+      "--accent-green": "143 47% 47%",
+      "--text-navy": "209 58% 13%",
+      "--text-navy-muted": "209 58% 30%",
+      "--border": "34 30% 90%",
+      "--destructive": "0 84% 60%",
+      "--ring": "37 90% 55%"
+    },
+    "hex_reference": {
+      "Warm Amber (Primary)": "#F5A623",
+      "Sunrise Orange (Primary Hover)": "#FF8A3D",
+      "Sky Blue (Accent)": "#3DA5E0",
+      "Leaf Green (Accent)": "#3FB06A",
+      "Deep Navy (Text/Footer)": "#0E2235",
+      "Soft Cream (Background)": "#FFF8EF",
+      "Clean White (Cards)": "#FFFFFF"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "section_y": "py-24 md:py-32",
+      "container_px": "px-6 md:px-12 max-w-7xl mx-auto",
+      "grid_gap": "gap-8 md:gap-12",
+      "card_padding": "p-8 md:p-10"
+    },
+    "surfaces": {
+      "card": "bg-white rounded-3xl shadow-[0_8px_30px_rgb(14,34,53,0.04)] border border-navy-900/5 transition-all duration-300",
+      "card_hover": "hover:shadow-[0_20px_40px_rgb(14,34,53,0.08)] hover:-translate-y-1",
+      "glass_header": "bg-cream/80 backdrop-blur-xl border-b border-navy-900/5 sticky top-0 z-50",
+      "pill": "bg-cream rounded-full px-4 py-2 border border-navy-900/10 text-navy-900 font-medium flex items-center gap-2"
+    },
+    "radii": {
+      "card": "1.5rem",
+      "button": "9999px",
+      "input": "1rem"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#F5A623] hover:bg-[#FF8A3D] text-white font-heading font-bold text-lg rounded-full px-8 py-4 transition-all duration-300 shadow-[0_4px_14px_rgba(245,166,35,0.39)] hover:shadow-[0_6px_20px_rgba(255,138,61,0.4)] hover:-translate-y-0.5",
+      "secondary": "bg-white text-[#0E2235] border-2 border-[#0E2235]/10 hover:border-[#0E2235]/30 font-heading font-bold text-lg rounded-full px-8 py-4 transition-all duration-300",
+      "ghost": "text-[#0E2235] font-heading font-bold text-lg hover:bg-[#0E2235]/5 rounded-full px-6 py-3 transition-colors"
+    },
+    "charts": {
+      "library": "recharts",
+      "styling": {
+        "tooltip": "bg-white border-none shadow-[0_8px_30px_rgb(14,34,53,0.1)] rounded-2xl p-4 font-body text-navy-900",
+        "axis": "font-body text-sm text-navy-900/50",
+        "grid": "stroke-navy-900/5 stroke-dasharray-4"
+      },
+      "colors": {
+        "solar": "#3DA5E0",
+        "savings": "#3FB06A",
+        "cost": "#F5A623",
+        "baseline": "#0E2235"
+      }
+    },
+    "data_testid_rule": "All interactive elements, buttons, inputs, links, and cards MUST have a kebab-case 'data-testid' attribute representing their specific action or role (e.g., 'start-assessment-button', 'solar-technology-card')."
+  },
+  "motion": {
+    "library": "framer-motion",
+    "patterns": {
+      "scroll_reveal": {
+        "initial": { "opacity": 0, "y": 30 },
+        "whileInView": { "opacity": 1, "y": 0 },
+        "viewport": { "once": true, "margin": "-100px" },
+        "transition": { "duration": 0.6, "ease": [0.22, 1, 0.36, 1] }
+      },
+      "stagger_children": {
+        "variants": {
+          "hidden": { "opacity": 0 },
+          "show": {
+            "opacity": 1,
+            "transition": { "staggerChildren": 0.1 }
+          }
+        }
+      },
+      "hover_lift": "transition-transform duration-300 ease-out hover:-translate-y-1"
+    },
+    "rule": "Keep motion subtle, calm, and grounded. No flashy bounces. Just fade and gentle rise."
+  },
+  "pages": {
+    "Global": {
+      "Header": {
+        "layout": "Sticky glass header (bg-cream/80 backdrop-blur-xl). Logo on left. Navigation links center. Log in and primary 'Start my assessment' button right.",
+        "behavior": "Links highlight with a soft underline on hover."
+      },
+      "Footer": {
+        "layout": "Deep navy background (#0E2235) with cream text. Huge typography for 'Let's energize your home.' Large CTA section above grid of links.",
+        "components": "Logo, tagline, page nav, social placeholders, legal text."
+      },
+      "CTA_Band": {
+        "layout": "Bright amber background (#F5A623), large rounded container within main padding. Text: 'Ready to see what your home can do?' + White Pill Button: 'Start my assessment'."
+      }
+    },
+    "Home": {
+      "Hero": {
+        "layout": "Split layout. Left: Big heading 'Let's energize your home.', supportive text, Primary button. Right: 3D React Three Fiber scene.",
+        "3d_scene": "Realistic stylized house with solar panels, wind turbine, battery, geothermal, trees, fence. Slow auto-rotate. Drag to spin. Floating HTML labels (HTML from @react-three/drei) pointing to parts.",
+        "live_stats": "Floating pill chips near the house showing live-looking animated numbers: '+$1,200 yearly savings', '100% clean power', '6 yr payback'."
+      },
+      "Features": {
+        "heading": "What Everstead gives you",
+        "layout": "Grid of 6 cards. Clean white cards on cream bg. Each has an icon (lucide-react, rendered in Sky Blue or Leaf Green) and plain text."
+      },
+      "Technologies": {
+        "heading": "Every clean energy option in one place",
+        "layout": "Bento-style grid of technology cards: Solar, Wind, Geothermal, Micro-hydro, Battery. Each card has a subtle illustrative visual or icon and warm description."
+      },
+      "Preview": {
+        "heading": "How it works in three steps",
+        "layout": "Horizontal row of 3 steps linking to the full 'How It Works' journey."
+      }
+    },
+    "How_It_Works": {
+      "layout": "Vertical scroll-driven journey. 5 distinct sections.",
+      "mechanics": "Sticky left side with plain text explanation. Right side scrolls through interactive visuals.",
+      "visuals_per_step": [
+        "Step 1: Map pin drop on a neighborhood.",
+        "Step 2: Animated monthly sunlight bar/area chart (Recharts).",
+        "Step 3: Wind speed dial (gauge chart).",
+        "Step 4: Energy production comparison bars vs baseline.",
+        "Step 5: Interactive payback line chart with an electricity-price slider, donut chart of pay-vs-rebates."
+      ]
+    },
+    "About": {
+      "layout": "Warm, personal storytelling page.",
+      "founder_block": "Placeholder frame 'Photo coming soon', friendly greeting, mission statement.",
+      "mission_cards": "Row of 3 cards detailing core values (e.g., 'Real homes', 'Plain truth', 'Lasting energy')."
+    },
+    "Whats_Next": {
+      "layout": "Roadmap page.",
+      "grid": "Responsive grid of feature cards.",
+      "tags": "Status tags on cards: Soon (Amber), Planned (Blue), Exploring (Green). Built as small rounded pills."
+    },
+    "Retrofit_My_Home": {
+      "layout": "Multi-step wizard centered in screen. Progress bar at top.",
+      "steps": [
+        "Start: Enter address screen.",
+        "Step 1: Property basics (radio buttons/pills for home size, roof type).",
+        "Step 2: Energy use (slider for monthly bill).",
+        "Step 3: Checking-location loading state (spinner + friendly text).",
+        "Results: Ranked technology cards, payback chart (Recharts), 25-year savings chart, available rebates box."
+      ],
+      "results_cards": "Highly visual cards showing: Cost, Yearly savings, Payback time, and a 'Plain reason' text block."
+    },
+    "Auth": {
+      "layout": "Centered card on cream background. Clean white card, deep shadow.",
+      "elements": "Email + password inputs, Google/Apple placeholder buttons, forgot password link."
+    },
+    "Dashboard": {
+      "layout": "Logged-in view. Sidebar navigation. Main content area.",
+      "header": "Greeting (e.g., 'Good morning, Alex').",
+      "saved_homes": "Grid of saved home cards. Each card contains: Address, 3D thumbnail image, top recommendation tag, savings amount, 'View my plan' button.",
+      "empty_state": "Friendly illustration + prompt to 'Start your first assessment'."
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "Hero Background / General Home",
+        "url": "https://images.pexels.com/photos/11301818/pexels-photo-11301818.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Picturesque brick house surrounded by greenery, sunny day."
+      },
+      {
+        "category": "Solar / Technology Card",
+        "url": "https://images.unsplash.com/photo-1658298775754-5839ffd434cc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwzfHxzb2xhciUyMHBhbmVscyUyMHJvb2Z8ZW58MHx8fHwxNzgyMDg0MTc5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Clean modern solar panels on a roof."
+      },
+      {
+        "category": "About / Homeowner",
+        "url": "https://images.pexels.com/photos/7579205/pexels-photo-7579205.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Smiling homeowner holding keys, warm and human."
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "usage": "Use rounded, friendly icons. Stroke width 2. Render in accent colors."
+    }
+  },
+  "anti_patterns_strictly_enforced": [
+    "NO generic AI template looks (no gradient blobs, no floating isometric geometric shapes).",
+    "NO dark mode for this brand. Must remain light, bright, and cream/white.",
+    "NO sharp corners on primary interactive elements. Everything must be rounded.",
+    "NO 'powered by AI' badges, fake chat bubbles, or robot icons.",
+    "NO em dashes in copy.",
+    "NO hype words (leverage, revolutionary, etc.)."
+  ]
+}
