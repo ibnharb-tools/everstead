@@ -37,7 +37,10 @@ def _retrofit_summary(r: Retrofit) -> dict:
 
 
 class SaveBody(BaseModel):
-    assessmentId: str
+    # Frontend sends full assessment dict + label
+    assessment: Optional[dict] = None
+    # Legacy: save by cached assessmentId
+    assessmentId: Optional[str] = None
     label: Optional[str] = None
 
 
@@ -66,11 +69,17 @@ async def get_retrofit(retrofit_id: str, user: User = Depends(current_user), db:
 
 @router.post("", status_code=201)
 async def save_retrofit(body: SaveBody, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
-    # Look up cached assessment
-    cache_result = await db.execute(select(AssessmentCache).where(AssessmentCache.id == body.assessmentId))
-    cached = cache_result.scalar_one_or_none()
-    if not cached:
-        _err("NOT_FOUND", "Assessment not found. Run a new assessment first.", status_code=404)
+    # Resolve the assessment JSON
+    if body.assessment and "technologies" in body.assessment:
+        assessment_json = json.dumps(body.assessment)
+    elif body.assessmentId:
+        cache_result = await db.execute(select(AssessmentCache).where(AssessmentCache.id == body.assessmentId))
+        cached = cache_result.scalar_one_or_none()
+        if not cached:
+            _err("NOT_FOUND", "Assessment not found. Run a new assessment first.", status_code=404)
+        assessment_json = cached.assessment_json
+    else:
+        _err("VALIDATION_ERROR", "Provide an assessment or assessmentId.", status_code=400)
 
     label = (body.label or "My home").strip()
     now = datetime.now(timezone.utc)
@@ -78,7 +87,7 @@ async def save_retrofit(body: SaveBody, user: User = Depends(current_user), db: 
         id=f"rtf_{uuid.uuid4().hex[:8]}",
         user_id=user.id,
         label=label,
-        assessment_json=cached.assessment_json,
+        assessment_json=assessment_json,
         created_at=now,
     )
     db.add(row)
