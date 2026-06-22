@@ -51,6 +51,11 @@ let webpackConfig = {
         ],
       };
 
+      // Remove fork-ts-checker-webpack-plugin (TS type checker; crashes on JS projects due to ajv conflict)
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        (p) => p.constructor && p.constructor.name !== 'ForkTsCheckerWebpackPlugin'
+      );
+
       // Add health check plugin to webpack if enabled
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);
