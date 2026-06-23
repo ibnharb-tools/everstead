@@ -16,11 +16,11 @@ function Poster({ className }) {
   );
 }
 
-export default function Home3D({ showLabels = true, className = 'w-full h-full' }) {
+export default function Home3D({ showLabels = true, className = 'w-full h-full', technologies }) {
   return (
     <div className={className}>
       <Suspense fallback={<Poster className="w-full h-full" />}>
-        <HomeScene showLabels={showLabels} />
+        <HomeScene showLabels={showLabels} technologies={technologies} />
       </Suspense>
     </div>
   );

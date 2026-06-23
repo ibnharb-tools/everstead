@@ -116,11 +116,11 @@ export function ResultsView({ assessment, actions = null }) {
       <div className="grid lg:grid-cols-[1.3fr_1fr] gap-6">
         <div className="rounded-3xl bg-gradient-to-b from-white to-cream border border-navy-900/5 shadow-soft overflow-hidden">
           <div className="h-[340px]">
-            <Home3D showLabels />
+            <Home3D showLabels technologies={techs} />
           </div>
           <div className="px-6 pb-5 -mt-2">
             <p className="font-heading font-bold text-navy-900">Your home, with the recommended setup</p>
-            <p className="text-sm text-navy-600 mt-1">Drag to spin. Solar on the roof, a battery on the wall, wind nearby.</p>
+            <p className="text-sm text-navy-600 mt-1">Drag to spin. Showing the technologies suited to your location.</p>
           </div>
         </div>
 
@@ -172,8 +172,8 @@ export function ResultsView({ assessment, actions = null }) {
         <div className="rounded-3xl bg-white border border-navy-900/5 shadow-soft p-6">
           <h3 className="font-heading font-bold text-xl text-navy-900">When solar pays for itself</h3>
           <p className="text-sm text-navy-600 mt-1">The line starts as the cost, then climbs as you save.</p>
-          <div className="h-64 mt-4">
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ height: 240 }} className="mt-4">
+            <ResponsiveContainer width="100%" height={240}>
               <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid stroke="#0E223510" vertical={false} />
                 <XAxis dataKey="year" tickLine={false} axisLine={false} tick={{ fill: '#5d7991', fontSize: 12 }} />
@@ -202,8 +202,8 @@ export function ResultsView({ assessment, actions = null }) {
         <div className="rounded-3xl bg-white border border-navy-900/5 shadow-soft p-6">
           <h3 className="font-heading font-bold text-xl text-navy-900">Where you stand over 25 years</h3>
           <p className="text-sm text-navy-600 mt-1">Your running total, costs first, then savings.</p>
-          <div className="h-64 mt-4">
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ height: 240 }} className="mt-4">
+            <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="savingsFill" x1="0" y1="0" x2="0" y2="1">

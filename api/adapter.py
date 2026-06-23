@@ -17,6 +17,34 @@ _ROOF_TO_WIND_KW = {"small": 5.0, "medium": 10.0, "large": 15.0}
 _ROOF_TO_BATTERY_KWH = {"small": 10.0, "medium": 13.5, "large": 20.0}
 _ROOF_TO_GSHP_KW = {"small": 7.0, "medium": 10.5, "large": 14.0}
 
+# Rebate URLs by inferred country code
+_REBATE_URLS = {
+    "CA": "https://www.nrcan.gc.ca/energy-efficiency/homes/canada-greener-homes-initiative/23230",
+    "US": "https://www.dsireusa.org/",
+    "AU": "https://www.energy.gov.au/households/solar-for-households",
+    "UK": "https://www.ofgem.gov.uk/check-if-energy-grant-available-you-great-british-insulation-scheme",
+    "EU": "https://energy.ec.europa.eu/topics/renewable-energy/renewable-energy-directive-targets-and-rules_en",
+}
+
+_REBATE_NOTES = {
+    "CA": (
+        "Canada's Greener Homes Initiative offers grants up to $5,000 for eligible upgrades. "
+        "Provincial programs (Ontario, Quebec, BC, etc.) may stack on top."
+    ),
+    "US": (
+        "US federal residential clean energy credits and local utility rebates vary by state. "
+        "DSIRE lists every available incentive by ZIP code."
+    ),
+    "AU": (
+        "Australia's Small-scale Renewable Energy Scheme (SRES) provides STCs for solar, wind, "
+        "and hydro systems. State-level rebates also apply."
+    ),
+    "UK": (
+        "The UK Great British Insulation Scheme and Boiler Upgrade Scheme offer grants for heat pumps "
+        "and insulation. Check Ofgem for your eligibility."
+    ),
+}
+
 # URL → {name, url} mapping for buy_at links
 _URL_NAMES = {
     "https://www.energysage.com/": {"name": "EnergySage", "url": "https://www.energysage.com/"},
@@ -35,8 +63,20 @@ def _buy_at(urls: list[str]) -> list[dict]:
     return [_URL_NAMES.get(u, {"name": u, "url": u}) for u in urls]
 
 
+def _roof_m2_to_pv_kw(roof_m2: float) -> float:
+    """~15% of roof area covered by panels at ~0.2 kW/m² panel density."""
+    return min(round(roof_m2 * 0.15 * 0.2 * 10, 1), 20.0)  # cap at 20 kW residential
+
+
+def _roof_m2_to_size_category(roof_m2: float) -> str:
+    if roof_m2 < 80:
+        return "small"
+    if roof_m2 < 180:
+        return "medium"
+    return "large"
+
+
 def build_engine_inputs(req: dict, allow_network: bool = True) -> AssessmentInputs:
-    size = req.get("roofOrLotSize", "medium")
     features = req.get("siteFeatures") or []
     goals = req.get("goals") or []
     opts = req.get("options") or {}
@@ -44,12 +84,38 @@ def build_engine_inputs(req: dict, allow_network: bool = True) -> AssessmentInpu
     include_wind = "windy" in features or "open_land" in features
     include_battery = "backup_power" in goals or "all" in goals
     tax_year = opts.get("taxYear") or 2026
-    electricity_price = opts.get("electricityPrice") or 0.15
+
+    # Electricity price: use explicit option, derive from bill, or fall back to regional default
+    electricity_price = opts.get("electricityPrice")
+    if not electricity_price:
+        bill_dollar = req.get("monthlyBillDollar")
+        bill_kwh = req.get("monthlyBillKwh")
+        if bill_dollar and bill_kwh and bill_kwh > 0:
+            electricity_price = round(bill_dollar / bill_kwh, 4)
+        else:
+            electricity_price = 0.15
 
     lat = req.get("lat")
     lon = req.get("lon")
-    # Prefer explicit coordinates over address to avoid geocoding when offline.
     address = "" if (lat is not None and lon is not None) else (req.get("address") or "")
+
+    # Roof size: prefer exact m², fall back to small/medium/large
+    roof_m2 = req.get("roofSizeM2")
+    if roof_m2 and float(roof_m2) > 0:
+        roof_m2 = float(roof_m2)
+        pv_kw = _roof_m2_to_pv_kw(roof_m2)
+        size = _roof_m2_to_size_category(roof_m2)
+    else:
+        size = req.get("roofOrLotSize", "medium")
+        pv_kw = _ROOF_TO_PV_KW.get(size, 8.0)
+
+    # If stream detail provided, pass flow info to eval_hydro (engine uses it if present)
+    feature_details = req.get("siteFeatureDetails") or {}
+    stream_width = None
+    try:
+        stream_width = float((feature_details.get("stream") or {}).get("widthM") or 0) or None
+    except (TypeError, ValueError):
+        pass
 
     return AssessmentInputs(
         lat=lat,
@@ -60,7 +126,7 @@ def build_engine_inputs(req: dict, allow_network: bool = True) -> AssessmentInpu
         eval_wind=include_wind,
         eval_hydro="stream" in features,
         eval_geothermal=True,
-        pv_kw=_ROOF_TO_PV_KW.get(size, 8.0),
+        pv_kw=pv_kw,
         battery_kwh=_ROOF_TO_BATTERY_KWH.get(size, 13.5) if include_battery else 0.0,
         wind_kw=_ROOF_TO_WIND_KW.get(size, 10.0),
         gshp_kw_thermal=_ROOF_TO_GSHP_KW.get(size, 10.5),
@@ -119,6 +185,12 @@ def serialize_assessment(result: dict, req: dict, assessment_id: str,
     if not electricity_price:
         electricity_price = 0.15
 
+    country_code = _guess_country_code(site_summary)
+    rebate_url = _REBATE_URLS.get(country_code, _REBATE_URLS["US"])
+    # If we have a location-specific note, prefix it; else use the tax note alone
+    location_note = _REBATE_NOTES.get(country_code, "")
+    combined_note = f"{location_note} {fed_note}".strip() if location_note else fed_note
+
     return {
         "assessmentId": assessment_id,
         "currency": currency,
@@ -130,8 +202,8 @@ def serialize_assessment(result: dict, req: dict, assessment_id: str,
         "incentiveSummary": {
             "taxYear": tax_year,
             "federalCreditRate": fed_rate,
-            "note": fed_note,
-            "moreInfoUrl": "https://www.dsireusa.org/",
+            "note": combined_note,
+            "moreInfoUrl": rebate_url,
         },
         "charts": _make_charts(monthly_climate, lead),
         "disclaimer": "These results are an estimate for planning. They are not a quote or financial advice.",
@@ -344,10 +416,25 @@ def _reason_geo(t: dict, e: dict) -> str:
     return "Works well technically, but with current local energy prices the savings are modest."
 
 
+def _guess_country_code(site_summary: dict) -> str:
+    lat = site_summary.get("latitude") or 0
+    lon = site_summary.get("longitude") or 0
+    # Canada: lon roughly -141 to -52, lat roughly 42–84
+    if -141 < lon < -52 and 42 < lat < 84:
+        return "CA"
+    # Australia: lon 113–154, lat -44 to -10
+    if 113 < lon < 154 and -44 < lat < -10:
+        return "AU"
+    # UK/Ireland: lon -11 to 2, lat 49–61
+    if -11 < lon < 2 and 49 < lat < 61:
+        return "UK"
+    # Continental Europe: lon 2–32, lat 35–72
+    if 2 <= lon < 32 and 35 < lat < 72:
+        return "EU"
+    # Default to US
+    return "US"
+
+
 def _guess_currency(site_summary: dict) -> str:
-    lat = site_summary.get("latitude", 0)
-    lon = site_summary.get("longitude", 0)
-    # Canada: roughly lon < -50, lat > 42, lon > -141
-    if lon is not None and lat is not None and lon < -50 and lat > 42 and lon > -141:
-        return "CAD"
-    return "USD"
+    code = _guess_country_code(site_summary)
+    return {"CA": "CAD", "AU": "AUD", "UK": "GBP"}.get(code, "USD")

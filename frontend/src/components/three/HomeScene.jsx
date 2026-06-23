@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
 import HouseDiorama from './HouseDiorama';
 
-export default function HomeScene({ showLabels = true }) {
+export default function HomeScene({ showLabels = true, technologies }) {
   return (
     <Canvas
       shadows
@@ -28,7 +28,7 @@ export default function HomeScene({ showLabels = true }) {
         shadow-camera-bottom={-8}
       />
       <Suspense fallback={null}>
-        <HouseDiorama showLabels={showLabels} />
+        <HouseDiorama showLabels={showLabels} technologies={technologies} />
         <ContactShadows position={[0, -0.62, 0]} opacity={0.32} scale={13} blur={2.6} far={5} color="#3a2a18" />
       </Suspense>
       <OrbitControls
